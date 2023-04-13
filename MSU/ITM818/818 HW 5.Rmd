@@ -1,0 +1,248 @@
+---
+title: "818 HW 5"
+author: "Che Kuan Yu"
+date: "4/29/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup Code
+```{r setup1}
+getwd()
+setwd('/Users/chriz_yu/Documents/MSU/ITM 818/818 HW 05')
+Cereals = read.csv("Cereals.csv")
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(devtools)
+library(ggbiplot)
+library(leaps)
+library(forcats)
+```
+
+\newpage
+## Q1
+Regarding the categorical variable mfr, draw a bar chart to show the distribution. Sort the bars in the chart (from highest to lowest) (6 points)  
+```{r q1a}
+ggplot(data = Cereals, aes(x = fct_infreq(mfr))) +
+  geom_bar()+
+  labs(x = 'Manufacturer of cereal')
+```
+
+\newpage
+## Q2
+Calculate the average consumer rating for each combination of manufacturer (mfr) and type. Obtain a data frame (table) that follows the structure below. The table has three columns, namely mfr, type, and avgrating. Use value “0” to represent missing value (there is no any cereal for a certain combination of manufacturer and type). Take a screenshot of the data frame.
+Example data frame (note: “0” means missing value): (6 points)  
+```{r q2a}
+mfr1 = Cereals %>% group_by(mfr)%>% group_keys()
+type1 = Cereals %>% group_by(type) %>% group_keys()
+mfr = rep(mfr1$mfr, times = length(type1$type))
+type = rep(type1$type, times = length(mfr1$mfr))
+com = data.frame(mfr,type)
+
+avg_com = Cereals %>%
+  select(mfr, type, rating) %>%
+  group_by(mfr, type) %>%
+  summarise_at(vars(rating), list(avgrating = mean))
+avg_rate = avg_com %>% right_join(com, by = c("mfr", "type"))
+avg_rate$avgrating[is.na(avg_rate$avgrating)] = 0
+avg_rate$avgrating = round(avg_rate$avgrating,0)
+avg_rate
+```
+
+\newpage
+## Q3
+Focus on the numerical attributes and calculate the mean, median (Q2), 25th percentile (Q1), 75th percentile (Q3), min, max, and standard deviation for each of the numerical attributes. Store these summary statistics in a data frame having the structure below. Take a screenshot of the data frame. (6 points)   
+```{r q3a}
+num = select_if(Cereals, is.numeric)
+df = do.call(cbind, lapply(num, summary))
+df = data.frame(t(df))
+
+names(df)[names(df) == "Min."] <- "Min"
+names(df)[names(df) == "X1st.Qu."] <- "Q1"
+names(df)[names(df) == "X3rd.Qu."] <- "Q3"
+names(df)[names(df) == "Max."] <- "Max"
+names(df)[names(df) == "NA.s"] <- "Na"
+df = df%>%
+  select(Mean, Median, Q1, Q3, Min, Max)
+
+SD = c()
+for (i in names(num)){
+  SD = c(sd(unlist(num[i]), na.rm =TRUE), SD)
+} 
+df = cbind(df,SD)
+df
+```
+
+\newpage
+## Q4
+Use a proper visualization to show the distribution of consumer rating by different shelf height. If we were to predict consumer rating from shelf height, does it appear that we need to keep all three categories of shelf height or we could combine two of the categories as a new category? (6 points)  
+```{r q4a}
+ggplot(data = Cereals) +
+  geom_histogram(mapping = aes(x=rating, fill=as.factor(shelf)), color="white",binwidth=5, position = "stack")
+```
+
+We could combine shelf 2 and 3 as a new category.   
+
+\newpage
+## Q5
+Get the correlation table for the continuous variables. In addition, generate a scatter plot array for these variables. Find one pair of variables with strongest positive correlation and find one pair of variables with strongest negative correlation. Standardize the continuous variables and then re-conduct the correlation analysis. How would the correlations change if we standardize the data first? (6 points)    
+```{r q5a}
+num[is.na(num)] = 0
+corrplot(cor(num), type = 'lower', order = 'AOE')
+plot(num)
+pair_p = num%>%select(rating, sugars)
+pair_n = num%>%select(potass, fiber)
+plot(pair_p)
+plot(pair_n)
+pair_p_s = scale(pair_p)
+pair_n_s = scale(pair_n)
+plot(pair_p_s)
+plot(pair_n_s)
+num_s = scale(num)
+corrplot(cor(num_s), type = 'lower', order = 'AOE')
+```
+
+standardization will not alter the value of correlation.  
+
+\newpage
+## Q6
+Conduct a principal component analysis for the continuous variables except consumer rating to derive 4 principal components. Obtain the cumulative proportion of variance (of the continuous variables) captured by the 4 principal components? (6 points)  
+```{r q6a}
+x=model.matrix(rating~.,num)[,-1]
+rating.pca = prcomp(x,rank=4, retx = TRUE, scale = TRUE)
+summary(rating.pca)
+```
+
+\newpage
+## Q7
+Create proper visualizations to show distributions of 4 principal components (one chart for each component). Which principal component has the largest variance? (6 points)   
+```{r q7a}
+pca.df = data.frame(rating.pca$x)
+ggplot(pca.df, aes(x=PC1)) +
+  geom_histogram(binwidth=.5, colour="black", fill="white")
+ggplot(pca.df, aes(x=PC2)) +
+  geom_histogram(binwidth=.5, colour="black", fill="white")
+ggplot(pca.df, aes(x=PC3)) +
+  geom_histogram(binwidth=.5, colour="black", fill="white")
+ggplot(pca.df, aes(x=PC4)) +
+  geom_histogram(binwidth=.5, colour="black", fill="white")
+```
+
+PC1 has the largest variance.  
+
+\newpage
+## Q8
+Build scatter plots to show the relationships between 4 principal components and consumer rating (Note: you need to create 4 scatter plots. In each scatter plot, one principal component as X, and rating as Y). In each scatter plot, show the linear regression line with confidence intervals. Which principal component is mostly closely related to consumer rating? (6 points)   
+```{r q8a}
+pca.df$rating = num$rating
+
+ggplot(pca.df, aes(x=PC1, y=rating)) +
+  geom_point(size=2, shape=23) +
+  geom_smooth(method=lm)
+ggplot(pca.df, aes(x=PC2, y=rating)) +
+  geom_point(size=2, shape=23) +
+  geom_smooth(method=lm)
+ggplot(pca.df, aes(x=PC3, y=rating)) +
+  geom_point(size=2, shape=23) +
+  geom_smooth(method=lm)
+ggplot(pca.df, aes(x=PC4, y=rating)) +
+  geom_point(size=2, shape=23) +
+  geom_smooth(method=lm)
+```
+
+PC2 is mostly closely related to consumer rating.
+
+\newpage
+## Q9
+Please build a proper regression model with “subset selection step” to figure out which continuous variables are associated with consumer rating (dropping categorical variables). Please evaluate the predictive performance of the best subset selection model. Notice that you must determine the best number of selected variables using train-validation-test (50%/30%/20%) setting. (6 points)   
+```{r q9a}
+data = num
+set.seed(1)
+samp =sample(c(1,2,3),prob=c(0.5,0.3,0.2),size=nrow(data),replace=TRUE)
+train = if_else(samp == 1, TRUE,FALSE)
+valid = if_else(samp == 2, TRUE,FALSE)
+test = if_else(samp == 3, TRUE,FALSE)
+
+model1=regsubsets(rating~.,data[train,],nvmax=12,method="exhaustive")
+valid.mat=model.matrix(rating~.,data[valid,])
+test.mat=model.matrix(rating~.,data[test,])
+```
+
+```{r q9b}
+val.errors=numeric(12)
+for(i in 1:12){
+  coefi=coef(model1,id=i)
+  pred=valid.mat[,names(coefi)]%*%coefi
+  val.errors[i]=mean((data$rating[valid]-pred)^2)
+}
+val.errors
+best=which.min(val.errors)
+best
+plot(1:12,val.errors,type="b")
+```
+
+```{r q9c}
+model1.full = regsubsets(rating~.,data,nvmax=12,method="exhaustive")
+coefi = coef(model1.full, id = best)
+coefi
+subset.pred=test.mat[,names(coefi)]%*%coefi
+error = data$rating[test]-subset.pred
+MSE = mean(error^2)
+RMSE=sqrt(MSE)
+MAE=mean(abs(error))
+MAPE=mean(abs(error/data$rating[test]))*100
+c(MSE,RMSE,MAE,MAPE)
+```
+
+\newpage
+## Q10
+Please build a principal component regression (PCR) model to use continuous variables to predict consumer rating. Use PCA for continuous variables only (dropping categorical variables). Please evaluate the predictive performance of the best PCR model. Notice that you must determine the best number of principal components using train-validation-test (50%/30%/20%) setting. (6 points)   
+```{r q10a}
+set.seed(2)
+y=data$rating
+x=model.matrix(rating~.,data)[,-1]
+z=prcomp(x,rank=12,retx=TRUE,scale=TRUE)
+
+samp =sample(c(1,2,3),prob=c(0.5,0.3,0.2),size=nrow(data),replace=TRUE)
+train = if_else(samp == 1, TRUE,FALSE)
+valid = if_else(samp == 2, TRUE,FALSE)
+test = if_else(samp == 3, TRUE,FALSE)
+```
+
+```{r q10b}
+cv.errors=numeric(12)
+for (i in 1:12){
+  z=prcomp(x,rank=i,retx=TRUE,scale=TRUE)
+  train.data=data.frame(y=y[train],x=z$x[train,])
+  valid.data=data.frame(y=y[valid],x=z$x[valid,])
+  valid.mat=model.matrix(y~.,valid.data)
+  pcr=lm(y~.,data=train.data)
+  coefi=pcr$coefficients
+  pred=valid.mat%*%coefi
+  cv.errors[i]=mean((valid.data$y-pred)^2)
+}
+plot(1:12,cv.errors,type="b")
+best=which.min(cv.errors)
+best
+```
+
+```{r q10c}
+z = prcomp(x,rank= best,retx=TRUE,scale=TRUE)
+train.data=data.frame(y=y[train],x=z$x[train,])
+test.data=data.frame(y=y[test],x=z$x[test,])
+test.mat=model.matrix(y~.,test.data)
+pcr = lm(y~.,data=train.data)
+coefi=pcr$coefficients
+test.mat=model.matrix(y~.,test.data)
+pred=test.mat%*%coefi
+error = test.data$y-pred
+MSE = mean(error^2)
+RMSE=sqrt(MSE)
+MAE=mean(abs(error))
+MAPE=mean(abs(error/data$rating[test]))*100
+c(MSE,RMSE,MAE,MAPE)
+```
